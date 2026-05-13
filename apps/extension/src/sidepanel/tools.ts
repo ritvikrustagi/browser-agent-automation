@@ -8,14 +8,22 @@ export async function getActiveTabId(): Promise<number> {
   return id;
 }
 
+function getContentScriptFiles(): string[] {
+  const manifest = chrome.runtime.getManifest();
+  const entries = manifest.content_scripts?.flatMap((cs) => cs.js ?? []) ?? [];
+  return [...new Set(entries.filter(Boolean))];
+}
+
 async function ensureContentScript(tabId: number) {
+  const files = getContentScriptFiles();
+  if (!files.length) return;
   try {
     await chrome.scripting.executeScript({
       target: { tabId, allFrames: false },
-      files: ["src/content.ts"],
+      files,
     });
   } catch {
-    // ignore — content script may already be present, or the page is restricted
+    // ignore — content script may already be present, or the page is restricted (chrome://, web store)
   }
 }
 
@@ -33,6 +41,7 @@ async function sendWithRetry<T>(tabId: number, message: unknown): Promise<T> {
 }
 
 export async function captureSnapshot(tabId: number): Promise<PageSnapshot> {
+  await ensureContentScript(tabId);
   const res = await sendWithRetry<
     { ok: true; snapshot: PageSnapshot } | { ok?: false; error?: string }
   >(tabId, { type: "AGENT_CAPTURE_SNAPSHOT" });
