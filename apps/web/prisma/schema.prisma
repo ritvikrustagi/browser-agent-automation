@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum SessionStatus {
+  active
+  idle
+  closed
+  error
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tasks           Task[]
+  browserSessions BrowserSession[]
+  actionLogs      ActionLog[]
+  memories        Memory[]
+
+  @@map("users")
+}
+
+model Task {
+  id             String     @id @default(uuid()) @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  prompt         String
+  status         TaskStatus @default(pending)
+  agentMessages  Json?      @map("agent_messages")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  completedAt    DateTime?  @map("completed_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  browserSessions BrowserSession[]
+  agentSteps      AgentStep[]
+  toolCalls       ToolCall[]
+  approvals       Approval[]
+  actionLogs      ActionLog[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("tasks")
+}
+
+model BrowserSession {
+  id         String         @id @default(uuid()) @db.Uuid
+  userId     String         @map("user_id") @db.Uuid
+  taskId     String?        @map("task_id") @db.Uuid
+  currentUrl String?        @map("current_url")
+  status     SessionStatus  @default(active)
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([taskId])
+  @@map("browser_sessions")
+}
+
+model AgentStep {
+  id                String   @id @default(uuid()) @db.Uuid
+  taskId            String   @map("task_id") @db.Uuid
+  stepNumber        Int      @map("step_number")
+  observation       String?
+  reasoningSummary  String?  @map("reasoning_summary")
+  actionType        String?  @map("action_type")
+  actionPayload     Json?    @map("action_payload")
+  result            Json?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  toolCalls ToolCall[]
+
+  @@unique([taskId, stepNumber])
+  @@index([taskId, stepNumber])
+  @@map("agent_steps")
+}
+
+model ToolCall {
+  id          String   @id @default(uuid()) @db.Uuid
+  taskId      String   @map("task_id") @db.Uuid
+  agentStepId String?  @map("agent_step_id") @db.Uuid
+  toolName    String   @map("tool_name")
+  arguments   Json     @default("{}")
+  result      Json?
+  error       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  task      Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agentStep AgentStep? @relation(fields: [agentStepId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@index([toolName])
+  @@map("tool_calls")
+}
+
+model Approval {
+  id             String         @id @default(uuid()) @db.Uuid
+  taskId         String         @map("task_id") @db.Uuid
+  toolCallId     String?        @map("tool_call_id")
+  actionType     String         @map("action_type")
+  actionPayload  Json           @default("{}") @map("action_payload")
+  status         ApprovalStatus @default(pending)
+  createdAt      DateTime       @default(now()) @map("created_at")
+  resolvedAt     DateTime?      @map("resolved_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, status])
+  @@map("approvals")
+}
+
+model ActionLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  taskId     String?  @map("task_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  eventType  String   @map("event_type")
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  task Task? @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("action_logs")
+}
+
+model Memory {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  key       String
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("memories")
+}

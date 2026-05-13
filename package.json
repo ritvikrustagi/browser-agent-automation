@@ -1,0 +1,13 @@
+{
+  "name": "browser-automation",
+  "private": true,
+  "workspaces": ["apps/web", "apps/extension"],
+  "scripts": {
+    "dev:web": "npm run dev -w apps/web",
+    "build:web": "npm run build -w apps/web",
+    "dev:extension": "npm run dev -w apps/extension",
+    "build:extension": "npm run build -w apps/extension",
+    "db:generate": "npm run prisma:generate -w apps/web",
+    "db:push": "npm run prisma:push -w apps/web"
+  }
+}
