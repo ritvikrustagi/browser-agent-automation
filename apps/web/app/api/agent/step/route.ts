@@ -17,7 +17,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await runAgentStep(parsed.data);
+    const result = await runAgentStep({
+      taskId: parsed.data.taskId,
+      userId: parsed.data.userId,
+      pageSnapshot: parsed.data.pageSnapshot,
+      toolResults: parsed.data.toolResults,
+      screenshots: parsed.data.screenshots,
+    });
 
     if (result.status === "error") {
       return jsonResponse({ error: result.message }, { status: 400, request });

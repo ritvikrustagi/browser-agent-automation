@@ -6,6 +6,7 @@ import { formatSnapshotForModel, type PageSnapshot } from "./snapshot";
 import type { Prisma } from "@prisma/client";
 
 type ToolResult = { tool_call_id: string; content: string };
+type Screenshot = { tool_call_id: string; dataUrl: string };
 
 export type AgentStepResult =
   | {
@@ -57,6 +58,7 @@ export async function runAgentStep(input: {
   userId: string;
   pageSnapshot: PageSnapshot;
   toolResults?: ToolResult[];
+  screenshots?: Screenshot[];
 }): Promise<AgentStepResult> {
   if (!process.env.OPENAI_API_KEY) {
     return { status: "error", message: "OPENAI_API_KEY is not configured" };
@@ -136,15 +138,19 @@ export async function runAgentStep(input: {
       return { status: "completed", summary: done.summary, success: done.success };
     }
 
-    messages.push({
-      role: "user",
-      content: `Updated page after tool execution:\n${formatSnapshotForModel(input.pageSnapshot)}`,
-    });
+    messages.push(
+      buildPageUpdateMessage(
+        `Updated page after tool execution:\n${formatSnapshotForModel(input.pageSnapshot)}`,
+        input.screenshots,
+      ),
+    );
   } else {
-    messages.push({
-      role: "user",
-      content: `Updated page:\n${formatSnapshotForModel(input.pageSnapshot)}`,
-    });
+    messages.push(
+      buildPageUpdateMessage(
+        `Updated page:\n${formatSnapshotForModel(input.pageSnapshot)}`,
+        input.screenshots,
+      ),
+    );
   }
 
   const stepNumber =
@@ -259,6 +265,20 @@ export async function runAgentStep(input: {
   });
 
   return { status: "completed", summary: text || "Finished", success: true };
+}
+
+function buildPageUpdateMessage(text: string, screenshots?: Screenshot[]): ChatCompletionMessageParam {
+  if (!screenshots?.length) {
+    return { role: "user", content: text };
+  }
+  const content: ChatCompletionMessageParam["content"] = [
+    { type: "text", text },
+    ...screenshots.map((s) => ({
+      type: "image_url" as const,
+      image_url: { url: s.dataUrl, detail: "auto" as const },
+    })),
+  ];
+  return { role: "user", content };
 }
 
 async function resolveApprovalsFromToolResults(input: {

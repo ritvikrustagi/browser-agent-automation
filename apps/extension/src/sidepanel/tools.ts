@@ -8,10 +8,34 @@ export async function getActiveTabId(): Promise<number> {
   return id;
 }
 
+async function ensureContentScript(tabId: number) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, allFrames: false },
+      files: ["src/content.ts"],
+    });
+  } catch {
+    // ignore — content script may already be present, or the page is restricted
+  }
+}
+
+async function sendWithRetry<T>(tabId: number, message: unknown): Promise<T> {
+  const trySend = () => chrome.tabs.sendMessage(tabId, message) as Promise<T>;
+  try {
+    return await trySend();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/Receiving end does not exist|message channel closed/i.test(msg)) throw err;
+    await ensureContentScript(tabId);
+    await new Promise((r) => window.setTimeout(r, 250));
+    return await trySend();
+  }
+}
+
 export async function captureSnapshot(tabId: number): Promise<PageSnapshot> {
-  const res = (await chrome.tabs.sendMessage(tabId, { type: "AGENT_CAPTURE_SNAPSHOT" })) as
-    | { ok: true; snapshot: PageSnapshot }
-    | { ok?: false; error?: string };
+  const res = await sendWithRetry<
+    { ok: true; snapshot: PageSnapshot } | { ok?: false; error?: string }
+  >(tabId, { type: "AGENT_CAPTURE_SNAPSHOT" });
 
   if (!res || !("ok" in res) || !res.ok) {
     throw new Error("error" in res && res.error ? res.error : "Could not capture page (restricted page?)");
@@ -21,9 +45,9 @@ export async function captureSnapshot(tabId: number): Promise<PageSnapshot> {
 }
 
 async function sendExecute(tabId: number, name: string, args: Record<string, unknown>) {
-  const res = (await chrome.tabs.sendMessage(tabId, { type: "AGENT_EXECUTE", name, args })) as
-    | { ok: true; result: unknown }
-    | { ok?: false; error?: string };
+  const res = await sendWithRetry<
+    { ok: true; result: unknown } | { ok?: false; error?: string }
+  >(tabId, { type: "AGENT_EXECUTE", name, args });
 
   if (!res || !("ok" in res) || !res.ok) {
     throw new Error("error" in res && res.error ? res.error : "Execute failed");
@@ -55,7 +79,15 @@ export function waitTabComplete(tabId: number, timeoutMs = 45000) {
   });
 }
 
-export async function executeToolCall(tabId: number, tool: ToolCall): Promise<string> {
+export type ExecutedTool = { content: string; screenshotDataUrl?: string };
+
+async function captureVisibleTab(): Promise<string> {
+  const win = await chrome.windows.getLastFocused({ populate: false });
+  if (win.id == null) throw new Error("No focused window");
+  return chrome.tabs.captureVisibleTab(win.id, { format: "png" });
+}
+
+export async function executeToolCall(tabId: number, tool: ToolCall): Promise<ExecutedTool> {
   const name = tool.function.name;
   let args: Record<string, unknown> = {};
   try {
@@ -70,29 +102,47 @@ export async function executeToolCall(tabId: number, tool: ToolCall): Promise<st
       await chrome.tabs.update(tabId, { url });
       await waitTabComplete(tabId);
       await waitMs(400);
-      return JSON.stringify({ ok: true, url });
+      return { content: JSON.stringify({ ok: true, url }) };
     }
     case "wait_ms": {
       const ms = Math.min(30000, Math.max(0, Number(args.ms ?? 0)));
       await waitMs(ms);
-      return JSON.stringify({ ok: true, waited: ms });
+      return { content: JSON.stringify({ ok: true, waited: ms }) };
     }
     case "click_element":
     case "type_text":
     case "scroll_page":
       await sendExecute(tabId, name, args);
-      return JSON.stringify({ ok: true });
+      return { content: JSON.stringify({ ok: true }) };
+    case "screenshot": {
+      try {
+        const dataUrl = await captureVisibleTab();
+        return {
+          content: JSON.stringify({ ok: true, note: "Screenshot attached to next page update." }),
+          screenshotDataUrl: dataUrl,
+        };
+      } catch (err) {
+        return {
+          content: JSON.stringify({
+            ok: false,
+            error: err instanceof Error ? err.message : "screenshot failed",
+          }),
+        };
+      }
+    }
     case "request_human_approval": {
       const message = String(args.message ?? "Approve this step?");
       const approved = window.confirm(`Agent approval:\n\n${message}`);
-      return JSON.stringify({ approved });
+      return { content: JSON.stringify({ approved }) };
     }
     case "done":
-      return JSON.stringify({
-        summary: String(args.summary ?? ""),
-        success: Boolean(args.success),
-      });
+      return {
+        content: JSON.stringify({
+          summary: String(args.summary ?? ""),
+          success: Boolean(args.success),
+        }),
+      };
     default:
-      return JSON.stringify({ ok: false, error: `Unknown tool: ${name}` });
+      return { content: JSON.stringify({ ok: false, error: `Unknown tool: ${name}` }) };
   }
 }

@@ -70,6 +70,20 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "screenshot",
+      description:
+        "Capture a screenshot of the visible portion of the active tab. Use this when the DOM snapshot is not enough — e.g., to inspect visual layout, images, charts, or content rendered in a canvas. The image will be attached to your next page update.",
+      parameters: {
+        type: "object",
+        properties: {
+          reason: { type: "string", description: "Why you need the screenshot (logged for debugging)" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "request_human_approval",
       description:
         "Pause and ask the user to approve a sensitive or destructive next step. The UI will show the message.",
@@ -103,10 +117,13 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
 export const SYSTEM_PROMPT = `You are a careful browser automation agent. You receive:
 - The user's original goal
 - A structured list of interactive elements with stable refs (data-agent-ref)
+- Optionally a screenshot of the current viewport when you call the screenshot tool
 
 Rules:
 - Prefer the smallest sequence of actions needed.
 - Only use refs that appear in the latest snapshot.
+- Call screenshot when the text snapshot is ambiguous (e.g., visual choice, image content, canvas, or to confirm which input is focused).
+- For chat/DM apps the message field is usually a contenteditable role=textbox; type into it then either click the Send button or set submit=true to press Enter.
 - If you are unsure or the action could spend money, delete data, or publish content, call request_human_approval first.
 - When finished, call done with a concise summary.
 - After navigation, expect the next snapshot to change; do not assume old refs still exist.`;

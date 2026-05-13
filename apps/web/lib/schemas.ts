@@ -27,6 +27,14 @@ export const agentStepBodySchema = z.object({
       }),
     )
     .optional(),
+  screenshots: z
+    .array(
+      z.object({
+        tool_call_id: z.string(),
+        dataUrl: z.string().startsWith("data:image/"),
+      }),
+    )
+    .optional(),
 });
 
 export const sessionBodySchema = z.object({

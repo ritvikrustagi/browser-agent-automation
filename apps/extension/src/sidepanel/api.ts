@@ -63,6 +63,7 @@ export async function postAgentStep(
     userId: string;
     pageSnapshot: PageSnapshot;
     toolResults?: { tool_call_id: string; content: string }[];
+    screenshots?: { tool_call_id: string; dataUrl: string }[];
   },
 ) {
   return apiRequest<AgentStepResponse>(baseUrl, "/api/agent/step", extensionKey, {
