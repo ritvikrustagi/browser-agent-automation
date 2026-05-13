@@ -99,7 +99,19 @@ export default function App() {
         const shots: { tool_call_id: string; dataUrl: string }[] = [];
         for (const tc of res.toolCalls) {
           if (tc.type !== "function") continue;
-          const { content, screenshotDataUrl } = await executeToolCall(tabId, tc as ToolCall);
+          let content: string;
+          let screenshotDataUrl: string | undefined;
+          try {
+            const out = await executeToolCall(tabId, tc as ToolCall);
+            content = out.content;
+            screenshotDataUrl = out.screenshotDataUrl;
+          } catch (err) {
+            content = JSON.stringify({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+              hint: "The page likely changed; do not assume earlier refs still exist. Use the next snapshot to pick a fresh ref.",
+            });
+          }
           results.push({ tool_call_id: tc.id, content });
           if (screenshotDataUrl) shots.push({ tool_call_id: tc.id, dataUrl: screenshotDataUrl });
           log(`Tool ${tc.function.name} → ${content.slice(0, 180)}${content.length > 180 ? "…" : ""}`);

@@ -124,6 +124,7 @@ You are not restricted to the starting page. The active tab is yours: use the na
 
 Rules:
 - Prefer the smallest sequence of actions needed.
+- Emit ONE tool call per turn. Web apps (Instagram, LinkedIn, Gmail, etc.) re-render aggressively, so a ref captured a moment ago may not exist after the previous action. Wait for the next snapshot before deciding the next step.
 - Only use refs that appear in the latest snapshot.
 - After navigation, expect the next snapshot to change; do not assume old refs still exist. Wait briefly if the page is still loading.
 - Call screenshot when the text snapshot is ambiguous (e.g., visual choice, image content, canvas, or to confirm which input is focused).
