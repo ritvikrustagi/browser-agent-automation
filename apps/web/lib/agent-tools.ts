@@ -5,7 +5,8 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
     type: "function",
     function: {
       name: "navigate",
-      description: "Open a URL in the active tab.",
+      description:
+        "Open a URL in the active tab. Use this freely whenever the goal requires a different website than the one currently open (e.g., switch to google.com, gmail.com, the product page, etc.). Wait for the next snapshot before issuing further actions.",
       parameters: {
         type: "object",
         properties: { url: { type: "string", description: "Absolute https URL" } },
@@ -116,14 +117,16 @@ export const AGENT_TOOLS: ChatCompletionTool[] = [
 
 export const SYSTEM_PROMPT = `You are a careful browser automation agent. You receive:
 - The user's original goal
-- A structured list of interactive elements with stable refs (data-agent-ref)
+- A structured list of interactive elements with stable refs (data-agent-ref) for the CURRENT tab
 - Optionally a screenshot of the current viewport when you call the screenshot tool
+
+You are not restricted to the starting page. The active tab is yours: use the navigate tool to open any URL needed to accomplish the goal (search engines, the relevant product page, a docs site, the user's email, etc.). If unsure where to start, navigate to https://www.google.com/search?q=... with a useful query.
 
 Rules:
 - Prefer the smallest sequence of actions needed.
 - Only use refs that appear in the latest snapshot.
+- After navigation, expect the next snapshot to change; do not assume old refs still exist. Wait briefly if the page is still loading.
 - Call screenshot when the text snapshot is ambiguous (e.g., visual choice, image content, canvas, or to confirm which input is focused).
 - For chat/DM apps the message field is usually a contenteditable role=textbox; type into it then either click the Send button or set submit=true to press Enter.
-- If you are unsure or the action could spend money, delete data, or publish content, call request_human_approval first.
-- When finished, call done with a concise summary.
-- After navigation, expect the next snapshot to change; do not assume old refs still exist.`;
+- If you are unsure or the action could spend money, delete data, publish content, send messages on the user's behalf, or change account settings, call request_human_approval first.
+- When finished, call done with a concise summary.`;
