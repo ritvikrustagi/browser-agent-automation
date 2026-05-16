@@ -11,6 +11,10 @@ const STORAGE_KEYS = {
   userId: "userId",
 } as const;
 
+function formatTime(ts: number) {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" });
+}
+
 export default function App() {
   const [apiBaseUrl, setApiBaseUrl] = useState("http://localhost:3000");
   const [extensionKey, setExtensionKey] = useState("");
@@ -131,35 +135,66 @@ export default function App() {
     }
   }, [apiBaseUrl, extensionKey, userId, prompt, log]);
 
-  const logText = useMemo(() => logs.map((l) => `[${new Date(l.t).toLocaleTimeString()}] ${l.text}`).join("\n"), [logs]);
+  const logNodes = useMemo(
+    () =>
+      logs.map((l, i) => (
+        <div key={`${l.t}-${i}`} className={`log-line ${l.level === "error" ? "log-line--error" : ""}`}>
+          <span className="log-time">{formatTime(l.t)}</span>
+          <span className="log-text">{l.text}</span>
+        </div>
+      )),
+    [logs],
+  );
 
   return (
     <div className="wrap">
       <header className="header">
-        <div>
-          <div className="title">Browser agent</div>
-          <div className="subtitle">Side panel · Next.js backend · OpenAI tools</div>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden />
+          <div>
+            <div className="title">Browser agent</div>
+            <div className="subtitle">Runs on the active tab · Next.js API · OpenAI tools</div>
+          </div>
         </div>
       </header>
 
       <section className="card">
-        <label className="label">API base URL</label>
-        <input className="input" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} />
+        <div className="card-head">
+          <h2 className="card-title">Connection</h2>
+          <span className={`badge ${userId ? "badge-on" : "badge-off"}`}>{userId ? "Session" : "No session"}</span>
+        </div>
 
-        <label className="label">Extension API key</label>
-        <input
-          className="input"
-          type="password"
-          value={extensionKey}
-          onChange={(e) => setExtensionKey(e.target.value)}
-          placeholder="Matches EXTENSION_API_KEY on the server"
-        />
+        <div className="field">
+          <label className="label" htmlFor="api-url">
+            API base URL
+          </label>
+          <input id="api-url" className="input" value={apiBaseUrl} onChange={(e) => setApiBaseUrl(e.target.value)} autoComplete="off" />
+        </div>
 
-        <label className="label">Dev email</label>
-        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <div className="field">
+          <label className="label" htmlFor="ext-key">
+            Extension API key
+          </label>
+          <input
+            id="ext-key"
+            className="input"
+            type="password"
+            value={extensionKey}
+            onChange={(e) => setExtensionKey(e.target.value)}
+            placeholder="Same value as EXTENSION_API_KEY in apps/web/.env"
+            autoComplete="off"
+          />
+        </div>
+
+        <div className="field">
+          <label className="label" htmlFor="email">
+            Dev email
+          </label>
+          <input id="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        </div>
 
         <div className="row">
-          <button className="btn" type="button" disabled={busy} onClick={() => void bootstrapSession()}>
+          <button className="btn secondary" type="button" disabled={busy} onClick={() => void bootstrapSession()}>
             Bootstrap session
           </button>
           <button className="btn secondary" type="button" disabled={busy} onClick={() => void saveSettings()}>
@@ -167,12 +202,23 @@ export default function App() {
           </button>
         </div>
 
-        <div className="meta">{userId ? `userId: ${userId}` : "No session yet"}</div>
+        <div className="meta">
+          <strong>User id</strong>
+          {userId || "Bootstrap to create a user for this browser."}
+        </div>
       </section>
 
       <section className="card">
-        <label className="label">Goal</label>
-        <textarea className="textarea" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} />
+        <div className="card-head">
+          <h2 className="card-title">Task</h2>
+        </div>
+
+        <div className="field">
+          <label className="label" htmlFor="goal">
+            Goal
+          </label>
+          <textarea id="goal" className="textarea" value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={5} />
+        </div>
 
         <button className="btn primary" type="button" disabled={busy} onClick={() => void runTask()}>
           {busy ? "Running…" : "Run on active tab"}
@@ -180,8 +226,10 @@ export default function App() {
       </section>
 
       <section className="card">
-        <label className="label">Log</label>
-        <pre className="log">{logText || "…"}</pre>
+        <div className="card-head">
+          <h2 className="card-title">Activity</h2>
+        </div>
+        <div className="log-scroll">{logs.length ? logNodes : <div className="log-empty">Logs appear here when you run a task.</div>}</div>
       </section>
     </div>
   );
